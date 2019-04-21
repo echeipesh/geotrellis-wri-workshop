@@ -1,7 +1,7 @@
 package org.globalforestwatch.treecoverloss
 
 import com.typesafe.scalalogging.LazyLogging
-import geotrellis.raster.{MultibandTile, Raster, RasterExtent, Tile}
+import geotrellis.raster.Raster
 import geotrellis.spark.SpatialKey
 import geotrellis.vector._
 import org.apache.spark.Partitioner
@@ -9,7 +9,7 @@ import org.apache.spark.rdd.RDD
 import cats.implicits._
 import geotrellis.contrib.polygonal._
 import geotrellis.spark.tiling.LayoutDefinition
-import Implicits._
+import math.round
 
 object TreeLossRDD extends LazyLogging {
 
@@ -50,7 +50,15 @@ object TreeLossRDD extends LazyLogging {
           featurePartition.toArray.groupBy{ case (windowKey, feature) => windowKey }
 
         groupedByKey.toIterator.flatMap { case (windowKey, keysAndFeatures) =>
-          val window: Extent = windowKey.extent(windowLayout)
+
+          // round to one integer to assure we have 400 * 400 blocks
+          val _window: Extent = windowKey.extent(windowLayout)
+          val xmin: Double = _window.xmin
+          val ymin: Double = _window.ymin
+          val xmax: Double = _window.xmax
+          val ymax: Double = _window.ymax
+
+          val window = new RoundedExtent(xmin, ymin, xmax, ymax, 1)
 
           val maybeRasterSource: Either[Throwable, TenByTenGridSources] =
             Either.catchNonFatal {
@@ -61,23 +69,7 @@ object TreeLossRDD extends LazyLogging {
 
           val maybeRaster: Either[Throwable, Raster[TreeLossTile]] =
             maybeRasterSource.flatMap { rs: TenByTenGridSources =>
-              Either.catchNonFatal {
-                // TODO: Talk about how to make biomass optional and still produce an answer
-                logger.info(s"Reading: $windowKey, ${rs.forestChangeSourceUri}")
-                val lossYear: MultibandTile = rs.forestChangeSource.read(window).get.tile.withNoData(Some(0))
-
-                logger.info(s"Reading: $windowKey, ${rs.treeCoverSourceUri}")
-                val treeCover: MultibandTile = rs.treeCoverSource.read(window).get.tile
-
-                logger.info(s"Reading: $windowKey, ${rs.bioMassSourceUri}")
-                val biomass: MultibandTile = rs.bioMassSource.read(window).get.tile
-
-                val tile = TreeLossTile(
-                  lossYear.band(0),
-                  treeCover.band(0),
-                  biomass.band(0))
-                Raster(tile, window)
-              }
+              rs.readWindow(window)
             }
 
           // flatMap here flattens out and ignores the errors
