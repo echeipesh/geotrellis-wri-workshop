@@ -1,55 +1,22 @@
 package org.globalforestwatch.treecoverloss
 
-import cats.Semigroup
+import cats.{Monoid, Semigroup}
 import geotrellis.raster.histogram.StreamingHistogram
 
 /** Summary data per class
-  *
   * Note: This case class contains mutable values
   *
-  * @param totalArea
-  * @param totalGainArea
-  * @param totalBiomass
-  * @param totalCo2
-  * @param biomassHistogram
-  * @param totalMangroveBiomass
-  * @param totalMangroveCo2
-  * @param mangroveBiomassHistogram
+  * @param tcdHistogram distribution of tree cover density pixels values
+  * @param totalCo2 sum of co2 pixel values
   */
-case class LossData(var lossYear: scala.collection.mutable.Map[Int, LossYearData], var totalArea: Double, var totalGainArea: Double, var totalBiomass: Double,
-                    var totalCo2: Double, var biomassHistogram: StreamingHistogram, var totalMangroveBiomass: Double,
-                    var totalMangroveCo2: Double, var mangroveBiomassHistogram: StreamingHistogram) {
+case class LossData(tcdHistogram: StreamingHistogram, var totalCo2: Double) {
   def merge(other: LossData): LossData = {
-
-    LossData(
-      lossYear ++ other.lossYear.map { case (k, v) => {
-        val loss: LossYearData = lossYear(k)
-        var otherLoss: LossYearData = v
-        otherLoss.area_loss += loss.area_loss
-        otherLoss.biomass_loss += loss.biomass_loss
-        otherLoss.carbon_emissions += loss.carbon_emissions
-        otherLoss.mangrove_biomass_loss += loss.mangrove_biomass_loss
-        otherLoss.mangrove_carbon_emissions += loss.mangrove_carbon_emissions
-        k -> otherLoss
-      }
-      },
-      totalArea + other.totalArea,
-      totalGainArea + other.totalGainArea,
-      totalBiomass + other.totalBiomass,
-      totalCo2 + other.totalCo2,
-      biomassHistogram.merge(other.biomassHistogram),
-      totalMangroveBiomass + other.totalMangroveBiomass,
-      totalMangroveCo2 + other.totalMangroveBiomass,
-      mangroveBiomassHistogram.merge(other.mangroveBiomassHistogram)
-    )
+    LossData(tcdHistogram.merge(other.tcdHistogram), totalCo2 + other.totalCo2)
   }
 }
 
 object LossData {
-  implicit val lossDataSemigroup: Semigroup[LossData] = new Semigroup[LossData] {
+  implicit val lossDataSemigroup = new Semigroup[LossData] {
     def combine(x: LossData, y: LossData): LossData = x.merge(y)
   }
-
 }
-
-

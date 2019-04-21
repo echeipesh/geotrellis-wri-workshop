@@ -30,7 +30,6 @@ resolvers ++= Seq(
    Resolver.bintrayRepo("azavea", "geotrellis")
 )
 
-
 libraryDependencies ++= Seq(
   sparkCore % Provided,
   sparkSQL % Provided,
@@ -50,17 +49,7 @@ libraryDependencies ++= Seq(
   "com.nativelibs4java" % "bridj" % "0.6.1",
   "com.azavea.geotrellis" %% "geotrellis-contrib-vlm" % "0.9.0",
   "com.azavea.geotrellis" %% "geotrellis-contrib-summary" % "0.1.1",
-  "org.scalanlp" %% "breeze" % "0.13.2",
-  "org.scalanlp" %% "breeze-natives" % "0.13.2",
-  "org.scalanlp" %% "breeze-viz" % "0.13.2"
 )
-
-resolvers += "Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/"
-
-// spark-daria
-resolvers += "jitpack" at "https://jitpack.io"
-libraryDependencies += "com.github.mrpowers" % "spark-daria" % "v0.30.0"
-
 
 // auto imports for local SBT console
 // can be used with `test:console` command
@@ -84,7 +73,6 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.globalforestwatch.treecoverloss._
 import org.globalforestwatch.util._
 
-
 val conf = new SparkConf().
 setIfMissing("spark.master", "local[*]").
 setAppName("Tree Cover Loss Console").
@@ -105,55 +93,29 @@ Test / javaOptions ++= Seq("-Xms1024m", "-Xmx8144m")
 // Settings for sbt-assembly plugin which builds fat jars for use by spark jobs
 test in assembly := {}
 assemblyMergeStrategy in assembly := {
-  case "reference.conf" => MergeStrategy.concat
-  case "application.conf" => MergeStrategy.concat
-  case PathList("META-INF", xs@_*) =>
-    xs match {
-      case ("MANIFEST.MF" :: Nil) => MergeStrategy.discard
-      // Concatenate everything in the services directory to keep GeoTools happy.
-      case ("services" :: _ :: Nil) =>
-        MergeStrategy.concat
-      // Concatenate these to keep JAI happy.
-      case ("javax.media.jai.registryFile.jai" :: Nil) | ("registryFile.jai" :: Nil) | ("registryFile.jaiext" :: Nil) =>
-        MergeStrategy.concat
-      case (name :: Nil) => {
-        // Must exclude META-INF/*.([RD]SA|SF) to avoid "Invalid signature file digest for Manifest main attributes" exception.
-        if (name.endsWith(".RSA") || name.endsWith(".DSA") || name.endsWith(".SF"))
-          MergeStrategy.discard
-        else
-          MergeStrategy.first
-      }
-      case _ => MergeStrategy.first
-    }
+  case s if s.startsWith("META-INF/services") => MergeStrategy.concat
+  case "reference.conf" | "application.conf"  => MergeStrategy.concat
+  case "META-INF/MANIFEST.MF" | "META-INF\\MANIFEST.MF" => MergeStrategy.discard
+  case "META-INF/ECLIPSEF.RSA" | "META-INF/ECLIPSEF.SF" => MergeStrategy.discard
   case _ => MergeStrategy.first
 }
 
 // Settings from sbt-lighter plugin that will automate creating and submitting this job to EMR
 import sbtlighter._
-import com.amazonaws.services.elasticmapreduce.model.Tag
 
 sparkEmrRelease             := "emr-5.20.0"
 sparkAwsRegion              := "us-east-1"
 sparkEmrApplications        := Seq("Spark", "Zeppelin", "Ganglia")
-sparkS3JarFolder            := "s3://wri-users/tmaschler/geotrellis-test/jars"
-sparkS3LogUri               := Some("s3://wri-users/tmaschler/geotrellis-test/logs")
-sparkSubnetId               := Some("subnet-116d9a4a")
-sparkSecurityGroupIds       := Seq("sg-6c6a5911")
-sparkInstanceCount := 20
+sparkS3JarFolder            := "s3://geotrellis-test/wri/jars"
+sparkInstanceCount          := 10
 sparkMasterType             := "m4.xlarge"
 sparkCoreType               := "m4.xlarge"
-sparkMasterEbsSize := Some(30)
-sparkCoreEbsSize := Some(30)
 sparkMasterPrice            := Some(0.5)
 sparkCorePrice              := Some(0.5)
 sparkClusterName            := s"geotrellis-treecoverloss"
 sparkEmrServiceRole         := "EMR_DefaultRole"
 sparkInstanceRole           := "EMR_EC2_DefaultRole"
-sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value.withEc2KeyName("tmaschler_wri2")
-sparkRunJobFlowRequest      := sparkRunJobFlowRequest.value.withTags(new Tag("Project", "Global Forest Watch"))
-                                                      .withTags(new Tag("Job", "Annual Update Geotrellis"))
-                                                      .withTags(new Tag("Project Lead", "Thomas Maschler"))
-                                                      .withTags(new Tag("Name", "geotrellis-treecoverloss"))
+sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value.withEc2KeyName("geotrellis-emr")
 sparkEmrConfigs             := List(
   EmrConfig("spark").withProperties(
     "maximizeResourceAllocation" -> "true"
